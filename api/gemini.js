@@ -50,7 +50,7 @@ export default async function handler(req, res) {
           contents,
           generationConfig: {
             temperature: 0.9,
-            maxOutputTokens: 400
+            maxOutputTokens: 800
           }
         })
       }
