@@ -177,7 +177,11 @@ sendBtn.addEventListener("click", send);
 
 // Enterキーでも送信
 document.getElementById("input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") send();
+  // Enterキーかつ、変換中じゃないときだけ送信
+  if (e.key === "Enter" && !e.isComposing) {
+    e.preventDefault(); // ←これ重要（勝手な送信防止）
+    send();
+  }
 });
 </script>
 
