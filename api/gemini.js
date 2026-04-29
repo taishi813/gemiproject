@@ -6,21 +6,8 @@ export default async function handler(req, res) {
   try {
     const { systemPrompt, history } = req.body;
 
-    if (!systemPrompt || !history) {
-      return res.status(400).json({
-        error: "systemPrompt または history が不足しています"
-      });
-    }
-
     const apiKey = process.env.GEMINI_API_KEY;
 
-    if (!apiKey) {
-      return res.status(500).json({
-        error: "GEMINI_API_KEY が設定されていません"
-      });
-    }
-
-    // Gemini用に変換
     const contents = [
       {
         role: "user",
@@ -32,8 +19,28 @@ export default async function handler(req, res) {
       }))
     ];
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-002:generateContent?key=${apiKey}`,
+    async function fetchWithRetry(url, options, retries = 3) {
+      for (let i = 0; i < retries; i++) {
+        const response = await fetch(url, options);
+
+        if (response.ok) return response;
+
+        const data = await response.json();
+
+        // 503だけリトライ
+        if (response.status === 503) {
+          await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+          continue;
+        }
+
+        throw new Error(JSON.stringify(data));
+      }
+
+      throw new Error("Geminiが混雑中（リトライ失敗）");
+    }
+
+    const response = await fetchWithRetry(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: {
@@ -43,7 +50,7 @@ export default async function handler(req, res) {
           contents,
           generationConfig: {
             temperature: 0.9,
-            maxOutputTokens: 500
+            maxOutputTokens: 400
           }
         })
       }
@@ -51,24 +58,13 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
-    // APIエラー詳細表示
-    if (!response.ok) {
-      console.error("Gemini API Error:", data);
-      return res.status(500).json({
-        error: data
-      });
-    }
-
     const reply =
       data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "（返答が取得できませんでした）";
+      "（返答なし）";
 
-    return res.status(200).json({ reply });
+    res.status(200).json({ reply });
 
   } catch (e) {
-    console.error("Server Error:", e);
-    return res.status(500).json({
-      error: e.message
-    });
+    res.status(500).json({ error: e.message });
   }
 }
