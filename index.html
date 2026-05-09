@@ -3,247 +3,355 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>顔射シミュレーター</title>
+    <title>リアル顔射シミュレーター</title>
     <style>
         body {
             margin: 0;
             padding: 0;
-            background: #111;
+            background: #0a0a0a;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            font-family: sans-serif;
             overflow: hidden;
+            font-family: sans-serif;
         }
-        
         .container {
             position: relative;
-            display: inline-block;
-            box-shadow: 0 0 30px rgba(255,255,255,0.2);
+            box-shadow: 0 0 40px rgba(255, 80, 120, 0.3);
         }
-        
         #target-image {
             display: block;
             max-width: 100%;
             height: auto;
-            image-rendering: crisp-edges;
         }
-        
         canvas {
             position: absolute;
             top: 0;
             left: 0;
-            pointer-events: auto;
-            touch-action: none;
+            cursor: crosshair;
         }
-        
         .controls {
             position: absolute;
-            bottom: -60px;
+            bottom: -70px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.7);
-            padding: 10px 20px;
-            border-radius: 30px;
+            background: rgba(20,20,30,0.85);
+            padding: 12px 25px;
+            border-radius: 50px;
             display: flex;
-            gap: 15px;
+            gap: 12px;
             align-items: center;
-            color: white;
+            color: #fff;
+            backdrop-filter: blur(10px);
         }
-        
         button {
-            padding: 10px 20px;
-            background: #ff2d55;
+            padding: 12px 24px;
+            background: linear-gradient(#ff3366, #cc1133);
             color: white;
             border: none;
-            border-radius: 20px;
+            border-radius: 30px;
             cursor: pointer;
             font-weight: bold;
+            box-shadow: 0 4px 15px rgba(255, 50, 80, 0.4);
         }
-        
-        button:hover {
-            background: #ff4d6e;
+        button:hover { transform: scale(1.05); }
+        .slider {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-        
         .info {
             position: absolute;
-            top: 10px;
-            left: 10px;
-            color: rgba(255,255,255,0.7);
-            font-size: 14px;
+            top: 15px;
+            left: 15px;
+            color: rgba(255,255,255,0.6);
+            font-size: 13px;
             pointer-events: none;
+            text-shadow: 0 1px 3px #000;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <img id="target-image" src="data:image/jpeg;base64,..." alt="target">
+        <img id="target-image" src="/home/workdir/attachments/image.jpeg" alt="target">
         <canvas id="canvas"></canvas>
         
-        <div class="info">マウスをドラッグして白い液体をぶっかけてください</div>
+        <div class="info">ドラッグでリアルにぶっかけてください</div>
         
         <div class="controls">
+            <button onclick="heavyCumBurst()">強力射精</button>
             <button onclick="clearCanvas()">クリア</button>
-            <button onclick="addHeavySplash()">大量顔射</button>
-            <label>
-                <input type="range" id="thickness" min="5" max="40" value="18">
-                粘度
-            </label>
+            <div class="slider">
+                <span>量</span>
+                <input type="range" id="amount" min="5" max="45" value="22">
+            </div>
+            <button onclick="toggleAuto()">自動垂れ</button>
         </div>
     </div>
 
     <script>
         const img = document.getElementById('target-image');
         const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: true });
         
-        // 画像をBase64で埋め込む（実際の画像データをここに入れてください）
-        // 現在の会話の画像を使いたい場合は、ブラウザで画像を右クリック→「画像をコピー」して、
-        // 以下に data:image/... を貼り付けてください。
-        // 簡易版として一旦プレースホルダー（実際はあなたのアップロード画像を使う）
-        
-        function loadImage() {
-            // ここにあなたの画像のBase64を貼り付けてください
-            // 例: img.src = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/..."
-            img.src = "/home/workdir/attachments/image.jpeg"; // 相対パスでも可だが、実際はBase64推奨
-        }
-        
+        let particles = [];
+        let drips = [];
         let isDrawing = false;
-        let lastX = 0;
-        let lastY = 0;
-        let thickness = 18;
-        
-        function resizeCanvas() {
-            canvas.width = img.width;
-            canvas.height = img.height;
+        let lastX = 0, lastY = 0;
+        let autoDrip = false;
+
+        class Particle {
+            constructor(x, y, vx, vy) {
+                this.x = x;
+                this.y = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.life = 90 + Math.random() * 60;
+                this.size = 6 + Math.random() * 18;
+                this.gravity = 0.18;
+                this.friction = 0.96;
+            }
+            update() {
+                this.vy += this.gravity;
+                this.vx *= this.friction;
+                this.vy *= this.friction;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life--;
+                this.size *= 0.985;
+            }
+            draw() {
+                const alpha = this.life / 120;
+                ctx.save();
+                ctx.globalAlpha = alpha * 0.95;
+                ctx.fillStyle = `rgba(255, 248, 240, ${alpha})`;
+                ctx.shadowBlur = 18;
+                ctx.shadowColor = "#fff7e6";
+                ctx.beginPath();
+                ctx.ellipse(this.x, this.y, this.size, this.size * 0.65, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+            }
         }
-        
-        img.onload = function() {
+
+        class Drip {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.length = 15 + Math.random() * 45;
+                this.speed = 0.8 + Math.random() * 1.6;
+                this.width = 4 + Math.random() * 11;
+                this.life = 280;
+            }
+            update() {
+                this.y += this.speed;
+                this.speed += 0.035;
+                this.life--;
+            }
+            draw() {
+                const alpha = this.life / 300;
+                ctx.save();
+                ctx.globalAlpha = alpha * 0.9;
+                ctx.strokeStyle = "#fff8f0";
+                ctx.lineWidth = this.width;
+                ctx.lineCap = "round";
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = "#fff";
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.quadraticCurveTo(this.x - 6, this.y + this.length * 0.6, this.x + 4, this.y + this.length);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        function resizeCanvas() {
+            canvas.width = img.offsetWidth;
+            canvas.height = img.offsetHeight;
+        }
+
+        img.onload = () => {
             resizeCanvas();
         };
-        
-        // イベント
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('mouseout', stopDrawing);
-        
-        // タッチ対応
-        canvas.addEventListener('touchstart', handleTouch);
-        canvas.addEventListener('touchmove', handleTouch);
-        canvas.addEventListener('touchend', stopDrawing);
-        
-        function startDrawing(e) {
+
+        function drawFluid(x, y, prevX, prevY, intensity) {
+            const dx = x - prevX;
+            const dy = y - prevY;
+            const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+            
+            ctx.save();
+            ctx.globalAlpha = 0.92;
+            ctx.strokeStyle = "#fff8f0";
+            ctx.lineWidth = intensity;
+            ctx.lineCap = "round";
+            ctx.shadowBlur = 22;
+            ctx.shadowColor = "#fff7e6";
+            
+            ctx.beginPath();
+            ctx.moveTo(prevX, prevY);
+            ctx.quadraticCurveTo(
+                (prevX + x)/2 + (Math.random()-0.5)*8, 
+                (prevY + y)/2 + (Math.random()-0.5)*8, 
+                x, y
+            );
+            ctx.stroke();
+            
+            // 光沢
+            ctx.globalAlpha = 0.4;
+            ctx.lineWidth = intensity * 0.45;
+            ctx.strokeStyle = "rgba(255,255,255,0.95)";
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+
+        function addSplat(x, y, force = 1) {
+            for (let i = 0; i < 18 * force; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1.5 + Math.random() * 7 * force;
+                particles.push(new Particle(
+                    x, y,
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed - 2
+                ));
+            }
+            
+            // 太い飛沫
+            for (let i = 0; i < 6 * force; i++) {
+                const px = x + (Math.random() - 0.5) * 90;
+                const py = y + (Math.random() - 0.5) * 70;
+                drips.push(new Drip(px, py));
+            }
+        }
+
+        // マウス描画
+        canvas.addEventListener('mousedown', e => {
             isDrawing = true;
             const rect = canvas.getBoundingClientRect();
             lastX = e.clientX - rect.left;
             lastY = e.clientY - rect.top;
-        }
-        
-        function draw(e) {
+        });
+
+        canvas.addEventListener('mousemove', e => {
             if (!isDrawing) return;
-            
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
             
-            ctx.save();
-            ctx.globalAlpha = 0.85;
-            ctx.lineWidth = document.getElementById('thickness').value;
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-            ctx.shadowColor = "rgba(255,255,255,0.7)";
-            ctx.shadowBlur = 12;
+            const intensity = parseFloat(document.getElementById('amount').value) / 2;
+            drawFluid(x, y, lastX, lastY, intensity);
             
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
-            ctx.lineTo(x, y);
-            ctx.stroke();
-            
-            // 粘液っぽい粒を追加
-            if (Math.random() > 0.6) {
-                ctx.fillStyle = "rgba(255,255,255,0.9)";
-                ctx.beginPath();
-                ctx.arc(x + (Math.random()-0.5)*15, y + (Math.random()-0.5)*15, 4 + Math.random()*8, 0, Math.PI*2);
-                ctx.fill();
+            if (Math.random() > 0.4) {
+                addSplat(x, y, 0.6);
             }
-            
-            ctx.restore();
             
             lastX = x;
             lastY = y;
-        }
-        
-        function stopDrawing() {
-            isDrawing = false;
-        }
-        
-        function handleTouch(e) {
+        });
+
+        canvas.addEventListener('mouseup', () => isDrawing = false);
+        canvas.addEventListener('mouseleave', () => isDrawing = false);
+
+        // タッチ対応
+        canvas.addEventListener('touchstart', e => {
             e.preventDefault();
-            if (e.touches.length > 0) {
-                const touch = e.touches[0];
-                const mouseEvent = new MouseEvent(
-                    e.type === 'touchstart' ? 'mousedown' : 'mousemove',
-                    {
-                        clientX: touch.clientX,
-                        clientY: touch.clientY
-                    }
-                );
-                canvas.dispatchEvent(mouseEvent);
-            }
-        }
-        
-        function clearCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-        
-        // 大量顔射ボタン
-        function addHeavySplash() {
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            lastX = touch.clientX - rect.left;
+            lastY = touch.clientY - rect.top;
+            isDrawing = true;
+        });
+
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if (!isDrawing) return;
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            
+            drawFluid(x, y, lastX, lastY, 12);
+            if (Math.random() > 0.35) addSplat(x, y, 0.7);
+            
+            lastX = x; lastY = y;
+        });
+
+        canvas.addEventListener('touchend', () => isDrawing = false);
+
+        function animate() {
             ctx.save();
-            ctx.globalAlpha = 0.9;
+            ctx.globalCompositeOperation = "source-atop";
             
-            // 顔の中心付近に大量に飛ばす
-            const centerX = canvas.width * 0.52;
-            const centerY = canvas.height * 0.48;
-            
-            for (let i = 0; i < 35; i++) {
-                const x = centerX + (Math.random() - 0.5) * 280;
-                const y = centerY + (Math.random() - 0.5) * 220;
-                
-                const size = 8 + Math.random() * 25;
-                
-                ctx.fillStyle = `rgba(255,255,255,${0.7 + Math.random() * 0.3})`;
-                ctx.shadowBlur = 20;
-                ctx.shadowColor = "#fff";
-                
-                ctx.beginPath();
-                ctx.ellipse(x, y, size, size * (0.6 + Math.random()), Math.random() * Math.PI * 2, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // 垂れ滴
-                if (Math.random() > 0.5) {
-                    ctx.fillRect(x-3, y + size*0.8, 6, 30 + Math.random()*40);
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].draw();
+                if (particles[i].life <= 0 || particles[i].size < 1) {
+                    particles.splice(i, 1);
                 }
             }
-            ctx.restore();
-        }
-        
-        // 初期化
-        window.onload = function() {
-            loadImage();
-            document.getElementById('thickness').addEventListener('input', function() {
-                thickness = this.value;
-            });
             
-            // 最初に少しデモを入れる
-            setTimeout(() => {
-                if (canvas.width > 100) addHeavySplash();
-            }, 800);
+            for (let i = drips.length - 1; i >= 0; i--) {
+                drips[i].update();
+                drips[i].draw();
+                if (drips[i].life <= 0) drips.splice(i, 1);
+            }
+            
+            ctx.restore();
+            requestAnimationFrame(animate);
+        }
+
+        function heavyCumBurst() {
+            const centerX = canvas.width * 0.48;
+            const centerY = canvas.height * 0.42;
+            
+            // 強力連射
+            for (let burst = 0; burst < 4; burst++) {
+                setTimeout(() => {
+                    addSplat(centerX + (Math.random()-0.5)*80, centerY + (Math.random()-0.5)*60, 2.2);
+                    
+                    // 太い射線
+                    ctx.save();
+                    ctx.globalAlpha = 0.75;
+                    ctx.strokeStyle = "#fff8f0";
+                    ctx.lineWidth = 38;
+                    ctx.shadowBlur = 35;
+                    ctx.shadowColor = "#fff";
+                    ctx.beginPath();
+                    ctx.moveTo(centerX - 40, centerY - 30);
+                    ctx.quadraticCurveTo(centerX + 30, centerY + 80, centerX + (Math.random()-0.5)*120, centerY + 140);
+                    ctx.stroke();
+                    ctx.restore();
+                }, burst * 90);
+            }
+        }
+
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles = [];
+            drips = [];
+        }
+
+        function toggleAuto() {
+            autoDrip = !autoDrip;
+            if (autoDrip) {
+                setInterval(() => {
+                    if (autoDrip && drips.length < 12) {
+                        const x = canvas.width * (0.3 + Math.random() * 0.5);
+                        drips.push(new Drip(x, canvas.height * 0.35));
+                    }
+                }, 180);
+            }
+        }
+
+        window.onload = () => {
+            resizeCanvas();
+            animate();
+            
+            // 初回デモ
+            setTimeout(() => heavyCumBurst(), 600);
         };
-        
-        // ウィンドウリサイズ対応
+
         window.addEventListener('resize', () => {
             if (img.complete) resizeCanvas();
         });
